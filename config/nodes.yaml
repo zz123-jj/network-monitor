@@ -1,0 +1,35 @@
+# 修改后 10 秒内自动生效。首次部署请填写自己的 VPS，不探测示例 IP。
+settings:
+  intervals:
+    ping: 10
+    tcp: 30
+    https: 30
+    dns: 60
+    mtr: 300
+  ping_count: 5
+  concurrency: 8
+  mtr_enabled: true
+  blackbox_enabled: true
+  event_retention_days: 30
+  event_max_rows: 50000
+  thresholds:
+    warning_rtt_ms: 120
+    critical_rtt_ms: 200
+    warning_loss_percent: 2
+    critical_loss_percent: 10
+    warning_jitter_ms: 30
+    critical_jitter_ms: 60
+    debounce_samples: 3
+    cooldown_seconds: 300
+nodes: []
+# nodes:
+#   - name: Tokyo
+#     host: 你的公网IP
+#     region: Japan
+#     location: Tokyo
+#     enabled: true
+#     tcp_ports: [22, 443]
+#     https_url: https://你的域名/health
+#     tags: [vless]
+#     provider: 你的服务商
+#     description: 东京主节点

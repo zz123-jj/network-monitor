@@ -1,0 +1,4 @@
+-r probe/requirements.txt
+-r backend/requirements.txt
+pytest==8.4.2
+pip-audit==2.9.0
