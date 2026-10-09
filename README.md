@@ -32,7 +32,7 @@ flowchart LR
 
 ## 2. 推荐服务器资源
 
-小规模节点建议 **2 vCPU / 2 GB RAM / 15–20 GB 空闲磁盘**。六容器资源上限合计约 1.5 GB；空载实际消耗通常更低，以 `docker stats` 实测。1 GB 机器建议关闭 Grafana 常驻运行并降低节点数，不保证完整六服务稳定运行。
+小规模节点建议 **2 vCPU / 2 GB RAM / 15–20 GB 空闲磁盘**。六容器资源上限合计约 1.6 GB；空载实际消耗通常更低，以 `docker stats` 实测。1 GB 机器建议关闭 Grafana 常驻运行并降低节点数，不保证完整六服务稳定运行。
 
 Prometheus 默认同时受 **30d 与 4GB** 限制，先触发者决定保留历史长度。4GB 不包含 WAL / 临时文件，留足磁盘余量。节点、TCP 端口、Blackbox 序列数会增加存储，不能保证任意规模均保留完整 30 天。
 
@@ -157,6 +157,15 @@ ssh -N -L 3000:127.0.0.1:3000 USER@SERVER_IP
 ```
 
 若希望 `http://SERVER_IP:3000`，在 `.env` 设置 `GRAFANA_BIND=0.0.0.0`，并在云安全组仅允许管理员 IP，再 `docker compose up -d grafana`。禁止匿名访问与开放注册；用户名、初始密码来自 `.env`。
+
+如果只开放 Web 端口，可选择将 Grafana 经 Nginx 暴露在 `/grafana/`，保留 Grafana 登录认证。在 `.env` 增加以下两项（把地址改成实际公网地址；HTTPS 代理环境使用实际 HTTPS 地址）：
+
+```ini
+GRAFANA_ROOT_URL=http://SERVER_IP/grafana/
+COMPOSE_FILE=docker-compose.yml:deploy/grafana-web.yml
+```
+
+随后运行 `docker compose up -d --wait --wait-timeout 180`，访问 `http://SERVER_IP/grafana/`。此入口为可选项，默认未开放。已有本机 `docker-compose.override.yml` 时，在 COMPOSE_FILE 中同时列出它，保留本机配置。Nginx 处理前缀与 WebSocket，Grafana 的内网 `/api/health` 地址不变。改域名/HTTPS 时更新 GRAFANA_ROOT_URL；升级 Nginx 时保留此挂载配置。
 
 默认 **不发布** 9090 / 9115 / 8000 / 8080。不要为方便诊断将这些端口开放公网。
 
@@ -414,30 +423,33 @@ Probe 与 Blackbox 仅 NET_RAW、无 privileged / NET_ADMIN / Docker socket；�
 
 ```bash
 docker compose pull prometheus blackbox grafana
-docker pull python:3.12-slim-bookworm
-docker pull node:22-alpine
-docker pull nginx:1.28-alpine
+docker pull python:3.12.15-slim-bookworm
+docker pull node:22.23.3-alpine
+docker pull nginx:1.28.3-alpine
 docker compose build --progress plain
 ```
 
 - 网络抖动：先重试 `docker pull`，成功后重跑构建；缓存保留已下载层。
 - 使用云厂商官方提供给你账号的可信 registry 加速服务，按其文档配置 daemon registry-mirrors。不要使用不明公共代理，不关闭 TLS 校验，不盲目信任同名镜像。
+- 阿里云加速器只支持有限镜像范围，对某个 tag 返回 not found 不能证明官方版本不存在，参见[官方限制说明](https://www.alibabacloud.com/help/en/acr/product-overview/product-change-acr-mirror-accelerator-function-adjustment-announcement)。项目默认 Prometheus/Blackbox 使用官方 Quay；Grafana 与三个基础镜像仍为官方 Docker Hub，可从可信联网机器下载后经 SSH 导入，或同步到自己的 ACR。
 - `.env` 的 `PROMETHEUS_IMAGE/BLACKBOX_IMAGE/GRAFANA_IMAGE/PYTHON_IMAGE/NODE_IMAGE/NGINX_IMAGE` 支持改为你自己的可信镜像仓库地址；保留版本/核对 digest。当前官方发行信息见 [Prometheus 下载](https://prometheus.io/download/) 和 [Grafana Releases](https://github.com/grafana/grafana/releases)。
 - 构建依赖源可设置 `APT_MIRROR`（替换 Debian 主仓库 URL，安全仓库另按组织政策处理）、`PIP_INDEX_URL`、`NPM_REGISTRY`。它们是构建参数，不影响运行；不得包含凭据。填写你信任且提供对应内容的源，不设全局 pip/npm 配置。
 - `docker buildx build` 使用的 builder 网络可能和宿主不同，Docker CLI 能下载不代表 builder 能访问 auth/docker.io。先预拉官方 base image，然后重试。
 
-完全离线迁移可在**相同 CPU 架构**且网络畅通的 Linux/Docker 机器上构建全部镜像，复制相同项目与 `.env` 的镜像名称设置，再导入：
+完全离线迁移可在**相同 CPU 架构**且网络畅通的 Docker 机器上构建全部镜像，复制相同项目与 `.env` 的镜像名称设置，再导入。新增脚本会保存六个镜像、架构/项目名、SHA-256 和源码：
 
 ```bash
 # 联网机器，确保 COMPOSE_PROJECT_NAME 与目标机器相同
-docker compose build
+COMPOSE_PARALLEL_LIMIT=1 docker compose build --pull=false
 docker compose pull prometheus blackbox grafana
-docker compose config --images | sort -u > image-list.txt
-docker save -o network-monitor-images.tar $(cat image-list.txt)
-# 将源代码与镜像包传至 Ubuntu
-docker load -i network-monitor-images.tar
-docker compose up -d --no-build --pull never --wait
+bash scripts/export-offline.sh ../network-monitor-offline
+# 将整个离线目录和项目源码传至目标 Ubuntu，在项目目录中执行：
+bash scripts/deploy-offline.sh ../network-monitor-offline
 ```
+
+源码归档不包含 .env、Git 历史、依赖缓存或业务数据卷；自己的 .env 另行安全传送，或生成新的密码。源码归档仍包含本机节点/额外 Compose 配置，按私有备份保管。恢复脚本先检查架构、COMPOSE_PROJECT_NAME 和 SHA-256，再执行 `--no-build --pull never`，不会删除卷或扫描清理其他镜像。迁移时保留原镜像名称和项目名；业务数据恢复仍使用第 12 节的备份脚本。
+
+镜像已存在时，日常启动直接运行 `docker compose up -d --no-build --pull never --wait --wait-timeout 180`。离线模式不执行 pull；更新镜像后重新导出离线包。Docker 服务启用开机启动且容器已由 up 启动时，VPS 重启自动恢复；主动 stop/down 后不会自行创建或重新启动该栈，需要再次执行 up。
 
 不要把 ARM64 构建产物直接当作 AMD64 镜像使用。联网构建时若目标为 AMD64，可使用支持多平台的 builder 显式构建 linux/amd64；之后需确认 Compose 使用相同应用 image tag。
 
@@ -475,6 +487,6 @@ docker compose up -d --no-build --pull never --wait
 5. HEAD 不测试内容正确性、认证业务路径、代理协议、UDP 或带宽，重定向不跟随。iperf3 为明确延后功能，本版不暴露执行接口，未来实现必须限制并发/持续时间/流量，最短一小时周期且默认关闭。
 6. Web 没有内置登录与 HTTPS，需要云安全组或已有认证 TLS 代理。Grafana 默认本机管理员入口。
 7. 长范围曲线按步长采样，短异常可能被跳过；异常 Events 独立存储可查，Grafana 可放大排查。NaN / missing 不会转成 0。
-8. 已提供安装脚本与 Ubuntu 兼容镜像；本交付本机验证在 Docker Linux 虚拟机中运行，未登录你实际的 Ubuntu 24.04 服务器。测试环境、检查项与结果在 validation.md 明确记录。
+8. 已在 Linux Docker 环境及一台实际 Ubuntu 24.04 大陆 VPS 上验证部署、真实节点、离线恢复和网页；未进行 30 天耐久或大量节点压力测试。环境、检查项与结果见 docs/validation.md。
 
 代码采用 [MIT License](LICENSE)。Grafana/Prometheus 等第三方组件保留各自开源许可。

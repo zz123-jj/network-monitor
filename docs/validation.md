@@ -1,6 +1,6 @@
 # 实际验证记录
 
-验证日期：2026-10-09，显示时区 Asia/Shanghai。执行宿主为 macOS ARM64，容器运行在 OrbStack 的 Linux Docker 环境。**没有连接用户的 Ubuntu 24.04 或真实东京/美国 VPS。** Ubuntu 安装脚本按 Docker 官方 Noble 仓库编写并通过 shell 语法检查，未在本机执行 apt/systemctl。
+验证日期：2026-10-09，显示时区 Asia/Shanghai。初次验证宿主为 macOS ARM64，容器运行在 OrbStack 的 Linux Docker 环境；初次集成测试使用本地 TLS fixture。同日另完成实际 Ubuntu 24.04 amd64 大陆云服务器部署及真实海外节点验证，见下文。Ubuntu 安装脚本按 Docker 官方 Noble 仓库编写并通过 shell 语法检查，未在本机执行 apt/systemctl。
 
 ## 检查结果
 
@@ -59,7 +59,22 @@
 
 空节点配置下，本机一次 `docker stats --no-stream` 的内存约：Probe 39 MiB、Backend 40 MiB、Frontend 6 MiB、Blackbox 7 MiB、Prometheus 50 MiB、Grafana 265 MiB，合计约 **407 MiB**。此数字不是有大量节点/30 天历史时的保证值，也不是轻量云宿主内存总量。
 
-未进行真实大陆云出站策略/运营商路径验证、Ubuntu 24.04 安装执行、30 天运行耐久测试或大量节点压力测试。部署到目标 Ubuntu 后必须运行 `bash scripts/test.sh`，再按 README 对 Tokyo 的真实 Ping/MTR/HTTPS 与 Grafana 曲线逐项验证。
+初次本地测试未覆盖大陆云出站路径；后续实机验证补充如下。仍未执行 Ubuntu 的全新安装、30 天运行耐久或大量节点压力测试。新部署应运行 `bash scripts/test.sh`，再对自己的目标逐项验证。
+
+## Ubuntu 24.04 大陆云实机验证
+
+实机为 amd64、约 1.6 GiB RAM，Docker 与 Compose 已安装。服务器地址、节点 IP、账户凭据与本机 Compose override 不进入公共源码。
+
+- 固定 Prometheus 3.13.4 / Blackbox 0.29.0 从官方 Quay 实际拉取；Grafana 13.2.2、Python 3.12.15、Node 22.23.3、Nginx 1.28.3 的 amd64 官方镜像由可信联网机器获取，经 SSH 传送并校验 SHA-256、RootFS 与 Config。
+- 三个应用在 Ubuntu 完成生产构建；Python 语法、Pydantic 节点配置、Grafana provisioning、promtool 与 nginx -t 均通过。
+- 六个服务最终均 healthy，未出现 OOM；restart policy 为 unless-stopped，Docker systemd 开机启动为 enabled。
+- 实际海外节点产生 Ping/Loss/Jitter、TCP 443、21 跳 MTR、Prometheus 历史曲线和异常/恢复事件。节点网络告警与容器健康分别验证。
+- Grafana 自动数据源健康 OK、经 Grafana 查询 network-probe up=1、已 provision 的 Dashboard UID 存在。关闭插件预装后启动不再等待远程插件下载。
+- 通过可选 /grafana/ 反代访问登录页和认证查询；实际浏览器渲染 8 张详情图，1440px 页面及 390px 手机页面通过检查，无整体横向溢出或 JavaScript 运行错误。
+- 实机离线镜像加载与 --no-build --pull never 启动通过，历史数据继续可查询，未删除数据卷；未执行整机重启。
+- 修复 Ping 的 -c 与 -w 参数组合：丢包时原命令曾发送 19 包来收到 5 个回复，移除 -w 后实测严格发送 5 包；单次等待与外层 subprocess timeout 保留。
+
+实机维护脚本使用本机镜像标签与路径；公共脚本保留相同离线流程，并检查 CPU 架构与项目名。公网 /grafana/ 为显式可选配置，默认 Grafana 仍绑定本机 3000。
 
 ## 可重复检查
 

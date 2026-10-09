@@ -1,4 +1,4 @@
-ARG PYTHON_IMAGE=python:3.12-slim-bookworm
+ARG PYTHON_IMAGE=python:3.12.15-slim-bookworm
 FROM ${PYTHON_IMAGE}
 ARG PIP_INDEX_URL=https://pypi.org/simple
 WORKDIR /app

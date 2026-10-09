@@ -15,7 +15,7 @@ services:
       context: .
       dockerfile: probe/Dockerfile
       args:
-        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12-slim-bookworm}
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12.15-slim-bookworm}
         APT_MIRROR: ${APT_MIRROR:-}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     cap_drop: [ALL]
@@ -38,7 +38,7 @@ services:
       start_period: 20s
   prometheus:
     <<: *service
-    image: ${PROMETHEUS_IMAGE:-prom/prometheus:v3.13.4}
+    image: ${PROMETHEUS_IMAGE:-quay.io/prometheus/prometheus:v3.13.4}
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -64,7 +64,7 @@ services:
       retries: 3
   blackbox:
     <<: *service
-    image: ${BLACKBOX_IMAGE:-prom/blackbox-exporter:v0.29.0}
+    image: ${BLACKBOX_IMAGE:-quay.io/prometheus/blackbox-exporter:v0.29.0}
     command: ['--config.file=/config/blackbox.yml']
     user: '0:0'
     cap_drop: [ALL]
@@ -90,6 +90,8 @@ services:
       GF_ANALYTICS_REPORTING_ENABLED: 'false'
       GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: 'false'
+      GF_PLUGINS_PREINSTALL_DISABLED: 'true'
+      GF_PLUGINS_PREINSTALL_AUTO_UPDATE: 'false'
       GF_DATE_FORMATS_DEFAULT_TIMEZONE: Asia/Shanghai
     cap_drop: [ALL]
     ports: ['${GRAFANA_BIND:-127.0.0.1}:${GRAFANA_PORT:-3000}:3000']
@@ -100,20 +102,21 @@ services:
     expose: ['3000']
     depends_on:
       prometheus: {condition: service_healthy}
-    mem_limit: 384m
+    mem_limit: 512m
     cpus: 0.5
     healthcheck:
-      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://localhost:3000/api/health']
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:3000/api/health']
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 30s
   backend:
     <<: *service
     build:
       context: .
       dockerfile: backend/Dockerfile
       args:
-        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12-slim-bookworm}
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12.15-slim-bookworm}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     environment:
       PROMETHEUS_URL: http://prometheus:9090
@@ -137,8 +140,8 @@ services:
     build:
       context: frontend
       args:
-        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
-        NGINX_IMAGE: ${NGINX_IMAGE:-nginx:1.28-alpine}
+        NODE_IMAGE: ${NODE_IMAGE:-node:22.23.3-alpine}
+        NGINX_IMAGE: ${NGINX_IMAGE:-nginx:1.28.3-alpine}
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     cap_drop: [ALL]
     read_only: true

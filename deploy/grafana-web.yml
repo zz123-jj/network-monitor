@@ -1,0 +1,10 @@
+# Optional authenticated Grafana access through the frontend's existing port.
+# Paths are relative to the base docker-compose.yml project directory.
+services:
+  grafana:
+    environment:
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:?Set the full public URL ending in /grafana/}
+      GF_SERVER_SERVE_FROM_SUB_PATH: 'false'
+  frontend:
+    volumes:
+      - ./deploy/nginx-grafana.conf:/etc/nginx/nginx.conf:ro

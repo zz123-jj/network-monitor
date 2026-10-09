@@ -1,5 +1,5 @@
-ARG NODE_IMAGE=node:22-alpine
-ARG NGINX_IMAGE=nginx:1.28-alpine
+ARG NODE_IMAGE=node:22.23.3-alpine
+ARG NGINX_IMAGE=nginx:1.28.3-alpine
 FROM ${NODE_IMAGE} AS build
 ARG NPM_REGISTRY=https://registry.npmjs.org
 WORKDIR /app

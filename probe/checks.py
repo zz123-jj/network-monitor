@@ -69,8 +69,6 @@ async def ping(node, settings):
             "0.2",
             "-W",
             "2",
-            "-w",
-            "6",
             node.host,
         ],
         8,
