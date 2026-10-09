@@ -81,7 +81,7 @@ services:
       retries: 3
   grafana:
     <<: *service
-    image: ${GRAFANA_IMAGE:-grafana/grafana:13.2.3}
+    image: ${GRAFANA_IMAGE:-grafana/grafana:13.2.2}
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
